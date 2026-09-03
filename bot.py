@@ -449,6 +449,7 @@ async def receive_url(
         )
 
         return URL
+    log.info(parsed)
 
     event_code = parsed[
         "event_code"
