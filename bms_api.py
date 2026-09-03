@@ -262,6 +262,7 @@ def parse_movie_url(movie_url: str) -> Dict[str, str]:
         if parts:
             log.info(parts)
             result["movie_slug"] = parts[-2] if len(parts) >= 2 else parts[-1]
+            result["region_slug"]=parts[1]
 
     except Exception:
         log.exception("Failed to parse movie URL")
