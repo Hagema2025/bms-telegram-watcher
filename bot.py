@@ -49,6 +49,10 @@ GITHUB_WATCHES_PATH = os.getenv("GITHUB_WATCHES_PATH", "data/watches.json")
 GITHUB_STATE_PATH = os.getenv("GITHUB_STATE_PATH", "data/watcher_state.json")
 GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main")
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 if not GITHUB_REPO or not GITHUB_TOKEN:
     raise RuntimeError("GITHUB_REPO and GITHUB_TOKEN environment variables are required.")
 
