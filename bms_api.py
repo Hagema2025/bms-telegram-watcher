@@ -245,7 +245,6 @@ def parse_movie_url(movie_url: str) -> Dict[str, str]:
     
 
     if not movie_url:
-        print(result)
         return result
 
     try:
@@ -257,11 +256,11 @@ def parse_movie_url(movie_url: str) -> Dict[str, str]:
         # Typical BMS URL:
         # /movies/.../movie-name/ETxxxxxx
         for part in parts:
-            print(part)
             if re.fullmatch(r"ET\d+", part, re.I):
                 result["event_code"] = part.upper()
 
         if parts:
+            log.info(parts)
             result["movie_slug"] = parts[-2] if len(parts) >= 2 else parts[-1]
 
     except Exception:
