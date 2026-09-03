@@ -5,6 +5,7 @@ import base64
 import json
 import logging
 import os
+import re
 import uuid
 
 import requests
@@ -31,42 +32,7 @@ from telegram.ext import (
 import bms_api
 
 
-import os
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
-
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path in ("/", "/health"):
-            body = b"OK"
-
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def log_message(self, format, *args):
-        # Keep Render logs clean
-        return
-
-
-def start_health_server():
-    port = int(os.environ.get("PORT", 10000))
-
-    server = HTTPServer(("0.0.0.0", port), HealthHandler)
-
-    thread = threading.Thread(
-        target=server.serve_forever,
-        daemon=True,
-    )
-    thread.start()
-
-    print(f"Health server started on port {port}")
 # ============================================================
 # CONFIG
 # ============================================================
@@ -84,12 +50,25 @@ GITHUB_WATCHES_PATH = os.getenv("GITHUB_WATCHES_PATH", "data/watches.json")
 GITHUB_STATE_PATH = os.getenv("GITHUB_STATE_PATH", "data/watcher_state.json")
 GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main")
 
-
 if not GITHUB_REPO or not GITHUB_TOKEN:
     raise RuntimeError("GITHUB_REPO and GITHUB_TOKEN environment variables are required.")
 
 MAX_MESSAGE_LENGTH = 3800
 
+COMBO_OPTIONS = [
+    ("tamil", "2d"),
+    ("tamil", "3d"),
+    ("telugu", "2d"),
+    ("telugu", "3d"),
+    ("malayalam", "2d"),
+    ("malayalam", "3d"),
+    ("kannada", "2d"),
+    ("kannada", "3d"),
+    ("hindi", "2d"),
+    ("hindi", "3d"),
+    ("english", "2d"),
+    ("english", "3d"),
+]
 
 # ============================================================
 # LOGGING
@@ -241,6 +220,92 @@ def start_health_server():
 # ============================================================
 # TEXT HELPERS
 # ============================================================
+
+def combo_display(language: str, movie_format: str) -> str:
+    language = clean_text(language)
+    movie_format = clean_text(movie_format)
+
+    if not language and not movie_format:
+        return ""
+
+    if language and movie_format:
+        return f"{language.title()} - {movie_format.upper()}"
+
+    return language.title() if language else movie_format.upper()
+
+def clean_text(value: Any) -> str:
+    if value is None:
+        return ""
+
+    text = str(value)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+
+def normalize_language(value: str) -> str:
+    value = clean_text(value).lower()
+
+    aliases = {
+        "mal": "malayalam",
+        "malayalam": "malayalam",
+        "tam": "tamil",
+        "tamil": "tamil",
+        "tel": "telugu",
+        "telugu": "telugu",
+        "hin": "hindi",
+        "hindi": "hindi",
+        "eng": "english",
+        "english": "english",
+        "kan": "kannada",
+        "kannada": "kannada",
+        "bengali": "bengali",
+        "marathi": "marathi",
+        "punjabi": "punjabi",
+        "gujarati": "gujarati",
+    }
+
+    return aliases.get(value, value)
+
+
+def normalize_format(value: str) -> str:
+    value = clean_text(value).lower()
+
+    if "imax" in value:
+        return "imax"
+
+    if "4dx" in value:
+        return "4dx"
+
+    if "3d" in value:
+        return "3d"
+
+    if "2d" in value:
+        return "2d"
+
+    if "epic" in value:
+        return "epic"
+
+    return value
+
+
+def normalize_combo(combo: str) -> tuple[str, str]:
+    combo = clean_text(combo)
+
+    if " - " in combo:
+        language, movie_format = combo.split(" - ", 1)
+    elif "|" in combo:
+        language, movie_format = combo.split("|", 1)
+    else:
+        language = combo
+        movie_format = ""
+
+    return (
+        normalize_language(language),
+        normalize_format(movie_format),
+    )
+
+
 
 def chunk_text(
     text: str,
@@ -405,7 +470,7 @@ async def start(
     }
 
     text = (
-        "🎬 *BookMyShow Chennai Watcher*\n\n"
+        "🎬 *BookMyShow Watcher*\n\n"
         "Send me the BookMyShow movie URL.\n\n"
         "Example:\n"
         "`https://in.bookmyshow.com/movies/"
@@ -436,7 +501,7 @@ async def receive_url(
     ).strip()
 
     try:
-        parsed = bms_api.parse_movie_url(
+        parsed = bms_api.parse_bms_url(
             url
         )
 
@@ -449,7 +514,6 @@ async def receive_url(
         )
 
         return URL
-    log.info(parsed)
 
     event_code = parsed[
         "event_code"
@@ -497,79 +561,34 @@ async def receive_url(
             region_slug
         )
 
-        data = await asyncio.to_thread(
-            bms_api.fetch_bms,
-            event_code,
-            region_slug,
-            datetime.now(),
-            region_code,
-            lat,
-            lon,
-            geohash,
-            None,
-            event_code,
-        )
+        
 
-        variants = (
-            bms_api.extract_event_variants(
-                data
-            )
-        )
 
-        if not variants:
-
-            await safe_edit_message_text(
-                status_message,
-                "❌ No language / format variants "
-                "were found for this movie.",
-            )
-
-            return URL
 
         keyboard = []
 
-        for key, variant in variants.items():
+        for language, movie_format in COMBO_OPTIONS:
 
-            language = variant.get(
-                "language",
-                "",
-            )
+         label = combo_display(
+            language,
+            movie_format,
+        )
 
-            movie_format = variant.get(
-                "format",
-                "",
-            )
-
-            disabled = bool(
-                variant.get(
-                    "disabled",
-                    False,
+         keyboard.append(
+            [
+                InlineKeyboardButton(
+                    label,
+                    callback_data=(
+                        f"combo|{language}|{movie_format}"
+                    ),
                 )
-            )
-
-            label = (
-                f"{language} - "
-                f"{movie_format}"
-            )
-
-            if disabled:
-                label += " ⚠️"
-
-            keyboard.append(
-                [
-                    InlineKeyboardButton(
-                        label,
-                        callback_data=(
-                            f"combo|{key}"
-                        ),
-                    )
-                ]
-            )
+            ]
+        )
 
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    "Any Language / Format",
+                    "🌐 Any Language / Format",
                     callback_data="combo|ANY",
                 )
             ]
@@ -608,7 +627,6 @@ async def receive_url(
 # ============================================================
 # COMBO CALLBACK
 # ============================================================
-
 async def combo_callback(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -616,9 +634,7 @@ async def combo_callback(
 
     query = update.callback_query
 
-    await safe_callback_answer(
-        query
-    )
+    await safe_callback_answer(query)
 
     user_id = query.from_user.id
 
@@ -642,16 +658,48 @@ async def combo_callback(
         return ConversationHandler.END
 
     data = query.data or ""
+    parts = data.split("|")
 
-    combo = data.split(
-        "|",
-        1,
-    )[1]
+    # --------------------------------------------------------
+    # Any language / format
+    # --------------------------------------------------------
 
-    if combo.upper() == "ANY":
-        combo = "Any"
+    if len(parts) >= 2 and parts[1].upper() == "ANY":
 
-    pending["combo"] = combo
+        pending["combo"] = "Any"
+        pending["language"] = ""
+        pending["format"] = ""
+
+    # --------------------------------------------------------
+    # Specific language + format
+    # --------------------------------------------------------
+
+    elif len(parts) >= 3:
+
+        language = normalize_language(
+            parts[1]
+        )
+
+        movie_format = normalize_format(
+            parts[2]
+        )
+
+        pending["language"] = language
+        pending["format"] = movie_format
+
+        pending["combo"] = combo_display(
+            language,
+            movie_format,
+        )
+
+    else:
+
+        await safe_edit_message_text(
+            query,
+            "❌ Invalid language / format selection.",
+        )
+
+        return COMBO
 
     cache["pending"] = pending
     USER_CACHE[user_id] = cache
@@ -675,17 +723,17 @@ async def combo_callback(
         query,
         (
             f"🎬 *{pending.get('movie_name', 'Movie')}*\n\n"
-            f"Language / Format: *{combo}*\n\n"
+            f"Language / Format: "
+            f"*{pending.get('combo', 'Any')}*\n\n"
             "Where should I watch?"
         ),
+        parse_mode=ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup(
-            keyboard
+            keyboard,
         ),
     )
 
     return VENUE
-
-
 # ============================================================
 # VENUE HELPERS
 # ============================================================
@@ -1497,6 +1545,14 @@ async def date_callback(
                 "combo",
                 "Any",
             ),
+            "language": pending.get(
+    "language",
+    "",
+),
+"format": pending.get(
+    "format",
+    "",
+),
 
             "date": target_date,
 
@@ -1909,6 +1965,8 @@ def main():
     # Start Render health endpoint first.
     # --------------------------------------------------------
 
+    start_health_server()
+
     # --------------------------------------------------------
     # Initialize/load Supabase.
     # --------------------------------------------------------
@@ -2037,6 +2095,4 @@ def main():
 # ============================================================
 
 if __name__ == "__main__":
-    start_health_server()
-
     main()
