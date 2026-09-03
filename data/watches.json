@@ -1,3 +1,29 @@
 {
-  "watches": {}
+  "watches": {
+    "0c84c84d": {
+      "id": "0c84c84d",
+      "user_id": 8742073620,
+      "chat_id": 8742073620,
+      "event_code": "ET00502829",
+      "region_slug": "chennai",
+      "movie_name": "Bethlehem Kudumba Unit",
+      "movie_url": "https://in.bookmyshow.com/movies/chennai/bethlehem-kudumba-unit/ET00502829",
+      "combo": "Tamil - 2D",
+      "language": "tamil",
+      "format": "2d",
+      "date": "2026-09-07",
+      "venue_mode": "selected",
+      "venues": [
+        "INOX: The Marina Mall, OMR"
+      ],
+      "last_state": {},
+      "previous_state": {},
+      "current_state": {},
+      "last_changes": [],
+      "initialized": false,
+      "created_at": "2026-09-03T21:40:01.225489",
+      "poll_count": 0,
+      "last_polled_at": null
+    }
+  }
 }
