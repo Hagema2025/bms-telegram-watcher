@@ -1901,7 +1901,6 @@ watches: Dict[
 # ============================================================
 
 def main():
-    start_health_server()
 
     global watches
 
@@ -2039,4 +2038,6 @@ def main():
 # ============================================================
 
 if __name__ == "__main__":
+    start_health_server()
+
     main()
