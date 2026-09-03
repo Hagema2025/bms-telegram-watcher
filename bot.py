@@ -501,7 +501,7 @@ async def receive_url(
     ).strip()
 
     try:
-        parsed = bms_api.parse_bms_url(
+        parsed = bms_api.parse_movie_url(
             url
         )
 
