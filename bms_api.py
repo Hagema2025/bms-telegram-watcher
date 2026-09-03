@@ -263,6 +263,8 @@ def parse_movie_url(movie_url: str) -> Dict[str, str]:
     except Exception:
         log.exception("Failed to parse movie URL")
 
+    print(result)
+
     return result
 
 
