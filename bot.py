@@ -31,7 +31,42 @@ from telegram.ext import (
 import bms_api
 
 
+import os
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path in ("/", "/health"):
+            body = b"OK"
+
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format, *args):
+        # Keep Render logs clean
+        return
+
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 10000))
+
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+
+    thread = threading.Thread(
+        target=server.serve_forever,
+        daemon=True,
+    )
+    thread.start()
+
+    print(f"Health server started on port {port}")
 # ============================================================
 # CONFIG
 # ============================================================
@@ -49,9 +84,6 @@ GITHUB_WATCHES_PATH = os.getenv("GITHUB_WATCHES_PATH", "data/watches.json")
 GITHUB_STATE_PATH = os.getenv("GITHUB_STATE_PATH", "data/watcher_state.json")
 GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main")
 
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
 
 if not GITHUB_REPO or not GITHUB_TOKEN:
     raise RuntimeError("GITHUB_REPO and GITHUB_TOKEN environment variables are required.")
@@ -1869,6 +1901,7 @@ watches: Dict[
 # ============================================================
 
 def main():
+    start_health_server()
 
     global watches
 
