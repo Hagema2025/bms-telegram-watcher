@@ -147,6 +147,9 @@ def normalize_format(value: str) -> str:
     if "2d" in value:
         return "2d"
 
+    if "epic" in value:
+        return "epic"
+
     return value
 
 
@@ -242,8 +245,6 @@ def parse_movie_url(movie_url: str) -> Dict[str, str]:
 
     movie_url = clean_text(movie_url)
 
-    
-
     if not movie_url:
         return result
 
@@ -260,14 +261,10 @@ def parse_movie_url(movie_url: str) -> Dict[str, str]:
                 result["event_code"] = part.upper()
 
         if parts:
-            log.info(parts)
             result["movie_slug"] = parts[-2] if len(parts) >= 2 else parts[-1]
-            result["region_slug"]=parts[1]
 
     except Exception:
         log.exception("Failed to parse movie URL")
-
-    print(result)
 
     return result
 
@@ -338,27 +335,9 @@ def _bms_headers(
 # FETCH BMS
 # ============================================================
 
-def fetch_bms(
-    event_code: str,
-    region: str = "chennai",
-    date_code: str = "",
-    language: str = "",
-    ref_event_code: str = "",
-) -> Dict[str, Any]:
-    date_code = normalize_date_code(date_code)
 
-    (
-        region_code,
-        region_slug,
-        lat,
-        lon,
-        geohash,
-    ) = resolve_region(region)
-
-    event_code = clean_text(event_code)
-    language = clean_text(language)
-    ref_event_code = clean_text(ref_event_code)
-
+def fetch_bms(event_code, date_code, region_code, region_slug,
+              lat, lon, geohash):
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -371,10 +350,7 @@ def fetch_bms(
             f"https://in.bookmyshow.com/movies/"
             f"{region_slug}/buytickets/{event_code}/"
         ),
-        "sec-ch-ua": (
-            '"Chromium";v="145", '
-            '"Not:A-Brand";v="99"'
-        ),
+        "sec-ch-ua": '"Chromium";v="145", "Not:A-Brand";v="99"',
         "sec-ch-ua-mobile": "?0",
         "sec-ch-ua-platform": '"macOS"',
         "x-app-code": "WEB",
@@ -386,74 +362,143 @@ def fetch_bms(
         "x-location-selection": "manual",
         "x-lsid": "",
     }
-
     params = {
         "eventCode": event_code,
         "dateCode": date_code or "",
         "isDesktop": "true",
         "regionCode": region_code,
         "xLocationShared": "false",
-        "memberId": "",
-        "lsId": "",
-        "subCode": "",
-        "lat": lat,
-        "lon": lon,
+        "memberId": "", "lsId": "", "subCode": "",
+        "lat": lat, "lon": lon,
     }
-
-    log.info(
-        "BMS FETCH | event=%s | region=%s | date=%s | "
-        "language=%s | ref=%s",
-        event_code,
-        region_slug,
-        date_code,
-        language,
-        ref_event_code,
-    )
-
-    log.info("BMS PARAMS | %s", params)
-
     try:
-        response = session.get(
-            API_URL,
-            params=params,
-            headers=headers,
-            timeout=30,
-        )
+        resp = requests.get(API_URL, headers=headers,
+                            params=params, timeout=15)
+        if resp.status_code == 200:
+            return resp.json()
+        log.info("Succesfully fetched")
+        print(f"  HTTP {resp.status_code}")
+    except requests.RequestException as e:
+        print(f"  Request failed: {e}")
+    return None
 
-        log.info(
-            "BMS RESPONSE | status=%s | url=%s",
-            response.status_code,
-            response.url,
-        )
 
-        if response.status_code != 200:
-            body = response.text[:2000]
+# def fetch_bms(
+#     event_code: str,
+#     region: str = "chennai",
+#     date_code: str = "",
+#     language: str = "",
+#     ref_event_code: str = "",
+# ) -> Dict[str, Any]:
+#     date_code = normalize_date_code(date_code)
 
-            log.error(
-                "BMS ERROR | status=%s | body=%s",
-                response.status_code,
-                body,
-            )
+#     (
+#         region_code,
+#         region_slug,
+#         lat,
+#         lon,
+#         geohash,
+#     ) = resolve_region(region)
 
-            raise RuntimeError(
-                f"BMS returned HTTP {response.status_code}: {body}"
-            )
+#     event_code = clean_text(event_code)
+#     language = clean_text(language)
+#     ref_event_code = clean_text(ref_event_code)
 
-        try:
-            data = response.json()
-        except Exception as exc:
-            raise RuntimeError(
-                f"BMS returned invalid JSON: "
-                f"{response.text[:1000]}"
-            ) from exc
+#     headers = {
+#         "User-Agent": (
+#             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+#             "AppleWebKit/537.36 (KHTML, like Gecko) "
+#             "Chrome/145.0.0.0 Safari/537.36"
+#         ),
+#         "Accept": "application/json, text/plain, */*",
+#         "Accept-Language": "en-US,en;q=0.9",
+#         "Referer": (
+#             f"https://in.bookmyshow.com/movies/"
+#             f"{region_slug}/buytickets/{event_code}/"
+#         ),
+#         "sec-ch-ua": (
+#             '"Chromium";v="145", '
+#             '"Not:A-Brand";v="99"'
+#         ),
+#         "sec-ch-ua-mobile": "?0",
+#         "sec-ch-ua-platform": '"macOS"',
+#         "x-app-code": "WEB",
+#         "x-region-code": region_code,
+#         "x-region-slug": region_slug,
+#         "x-geohash": geohash,
+#         "x-latitude": lat,
+#         "x-longitude": lon,
+#         "x-location-selection": "manual",
+#         "x-lsid": "",
+#     }
 
-        return data
+#     params = {
+#         "eventCode": event_code,
+#         "dateCode": date_code or "",
+#         "isDesktop": "true",
+#         "regionCode": region_code,
+#         "xLocationShared": "false",
+#         "memberId": "",
+#         "lsId": "",
+#         "subCode": "",
+#         "lat": lat,
+#         "lon": lon,
+#     }
 
-    except requests.RequestException as exc:
-        log.exception("BMS REQUEST FAILED")
-        raise RuntimeError(
-            f"BMS request failed: {exc}"
-        ) from exc
+#     log.info(
+#         "BMS FETCH | event=%s | region=%s | date=%s | "
+#         "language=%s | ref=%s",
+#         event_code,
+#         region_slug,
+#         date_code,
+#         language,
+#         ref_event_code,
+#     )
+
+#     log.info("BMS PARAMS | %s", params)
+
+#     try:
+#         response = session.get(
+#             API_URL,
+#             params=params,
+#             headers=headers,
+#             timeout=30,
+#         )
+
+#         log.info(
+#             "BMS RESPONSE | status=%s | url=%s",
+#             response.status_code,
+#             response.url,
+#         )
+
+#         if response.status_code != 200:
+#             body = response.text[:2000]
+
+#             log.error(
+#                 "BMS ERROR | status=%s | body=%s",
+#                 response.status_code,
+#                 body,
+#             )
+
+#             raise RuntimeError(
+#                 f"BMS returned HTTP {response.status_code}: {body}"
+#             )
+
+#         try:
+#             data = response.json()
+#         except Exception as exc:
+#             raise RuntimeError(
+#                 f"BMS returned invalid JSON: "
+#                 f"{response.text[:1000]}"
+#             ) from exc
+
+#         return data
+
+#     except requests.RequestException as exc:
+#         log.exception("BMS REQUEST FAILED")
+#         raise RuntimeError(
+#             f"BMS request failed: {exc}"
+#         ) from exc
 # ============================================================
 # VARIANT HELPERS
 # ============================================================
